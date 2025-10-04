@@ -16,19 +16,19 @@ app = FastAPI(title="Feedback Management System API")
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["*"],  # Allow all origins for now
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Database configuration
+# Database configuration - Railway PostgreSQL
 DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'database': os.getenv('DB_NAME', 'feedback_system'),
-    'user': os.getenv('DB_USER', 'postgres'),
-    'password': os.getenv('DB_PASSWORD', ''),
-    'port': int(os.getenv('DB_PORT', 5432))
+    'host': os.getenv('PGHOST', os.getenv('DB_HOST', 'localhost')),
+    'database': os.getenv('PGDATABASE', os.getenv('DB_NAME', 'feedback_system')),
+    'user': os.getenv('PGUSER', os.getenv('DB_USER', 'postgres')),
+    'password': os.getenv('PGPASSWORD', os.getenv('DB_PASSWORD', '')),
+    'port': int(os.getenv('PGPORT', os.getenv('DB_PORT', 5432)))
 }
 
 # Pydantic models
@@ -57,13 +57,18 @@ class GestureDetectionResponse(BaseModel):
 
 def get_db_connection():
     try:
+        print(f"Connecting to database: {DB_CONFIG['host']}:{DB_CONFIG['port']}")
         connection = psycopg2.connect(**DB_CONFIG)
+        print("Database connection successful")
         return connection
     except Error as e:
+        print(f"Database connection failed: {str(e)}")
+        print(f"DB Config: {DB_CONFIG}")
         raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
 
 def init_database():
     """Initialize database and create tables if they don't exist"""
+    connection = None
     try:
         connection = psycopg2.connect(**DB_CONFIG)
         cursor = connection.cursor()
@@ -98,16 +103,33 @@ async def startup_event():
 async def root():
     return {"message": "Feedback Management System API"}
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        cursor.execute("SELECT 1")
+        cursor.fetchone()
+        cursor.close()
+        connection.close()
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        return {"status": "unhealthy", "database": "disconnected", "error": str(e)}
+
 @app.post("/feedback", response_model=str)
 async def create_feedback(feedback: FeedbackBase):
     """Create a new feedback entry"""
+    connection = None
     try:
+        print(f"Creating feedback: {feedback.type}")
         connection = get_db_connection()
         cursor = connection.cursor()
         
         query = """
             INSERT INTO feedbacks (type, name, email, message)
             VALUES (%s, %s, %s, %s)
+            RETURNING id
         """
         
         cursor.execute(query, (
@@ -118,12 +140,17 @@ async def create_feedback(feedback: FeedbackBase):
         ))
         
         connection.commit()
-        feedback_id = cursor.fetchone()[0] if cursor.description else None
+        feedback_id = cursor.fetchone()[0]
         
+        print(f"Feedback created successfully with ID: {feedback_id}")
         return f"Feedback created successfully with ID: {feedback_id}"
         
     except Error as e:
+        print(f"Database error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception as e:
+        print(f"Unexpected error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
     finally:
         if connection:
             cursor.close()

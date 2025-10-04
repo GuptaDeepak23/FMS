@@ -27,7 +27,8 @@ const CameraFeedPython = ({ onGestureDetected }) => {
       const frameData = canvas.toDataURL('image/jpeg', 0.8);
       
       // Send to Python backend for gesture detection
-      const response = await fetch('http://localhost:8000/detect-gesture', {
+      const backendUrl = import.meta.env.VITE_API_URL || 'https://fmsb-production.up.railway.app';
+      const response = await fetch(`${backendUrl}/detect-gesture`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -83,10 +84,14 @@ const CameraFeedPython = ({ onGestureDetected }) => {
       
     } catch (error) {
       console.error('Error detecting gesture:', error);
+      console.error('Full error:', error);
+      
       if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-        setDebugInfo('Backend not running - Start Python server first');
+        setDebugInfo('Network error - Check backend URL: ' + backendUrl);
       } else if (error.message.includes('Invalid response')) {
         setDebugInfo('Backend serialization error - Restart Python server');
+      } else if (error.message.includes('CORS')) {
+        setDebugInfo('CORS error - Backend needs to allow Netlify domain');
       } else {
         setDebugInfo('Error: ' + error.message);
       }
