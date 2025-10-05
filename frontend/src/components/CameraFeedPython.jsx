@@ -27,7 +27,7 @@ const CameraFeedPython = ({ onGestureDetected }) => {
       const frameData = canvas.toDataURL('image/jpeg', 0.8);
       
       // Send to Python backend for gesture detection
-      const backendUrl = import.meta.env.VITE_API_URL || 'https://fmsb-production.up.railway.app';
+      const backendUrl = import.meta.env.VITE_API_URL || 'https://fmsb-production-2aa9.up.railway.app';
       const response = await fetch(`${backendUrl}/detect-gesture`, {
         method: 'POST',
         headers: {
@@ -131,7 +131,7 @@ const CameraFeedPython = ({ onGestureDetected }) => {
         };
         
         // Start gesture detection loop
-        const detectionInterval = setInterval(detectGesture, 200); // Process every 200ms
+        const detectionInterval = setInterval(detectGesture, 3000); // Process every 200ms
         
         return () => {
           clearInterval(detectionInterval);
